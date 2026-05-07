@@ -155,6 +155,50 @@
         .menuBtn:hover {
             transform: translateY(-3px) scale(1.05);
         }
+
+        /* Overlay Kết Thúc */
+        #winOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(46, 204, 113, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            backdrop-filter: blur(8px);
+        }
+
+        #winMenu {
+            background: white;
+            padding: 50px;
+            border-radius: 40px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            color: #2c3e50;
+            border: 8px solid #f1c40f;
+            max-width: 500px;
+        }
+
+        #winMenu h2 {
+            font-size: 48px;
+            color: #27ae60;
+            margin-bottom: 10px;
+        }
+
+        #winMenu p {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+
+        #replayBtn {
+            background: #3498db;
+            color: white;
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
     </style>
 </head>
 
@@ -171,6 +215,15 @@
             <h2>Đang Tạm Dừng</h2>
             <button id="resumeBtn" class="menuBtn">TIẾP TỤC</button>
             <button id="exitBtn" class="menuBtn">THOÁT</button>
+        </div>
+    </div>
+
+    <div id="winOverlay">
+        <div id="winMenu">
+            <h2 id="winTitle">CHÚC MỪNG BÉ!</h2>
+            <p id="winMsg">Bé đã tham gia giao thông rất giỏi và tới trường an toàn rồi!</p>
+            <button id="replayBtn" class="menuBtn">CHƠI LẠI</button>
+            <button id="winExitBtn" class="menuBtn" style="background: #e74c3c; color: white;">THOÁT</button>
         </div>
     </div>
 
@@ -200,32 +253,26 @@
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'vi-VN';
 
-            // Lấy danh sách giọng đọc có sẵn
             const voices = window.speechSynthesis.getVoices();
             const viVoices = voices.filter(voice => voice.lang.includes('vi'));
 
-            // Ưu tiên các giọng tự nhiên (Microsoft Natural, Google) thường mềm mại hơn
             let selectedVoice = viVoices.find(v => v.name.includes('Natural') || v.name.includes('HoaiMy') || v.name.includes('Google'));
             if (selectedVoice) {
                 utterance.voice = selectedVoice;
             } else if (viVoices.length > 0) {
-                utterance.voice = viVoices[0]; // Giọng mặc định nếu không có giọng xịn
+                utterance.voice = viVoices[0];
             }
 
-            // Chỉnh giọng cho dễ thương, phù hợp với trẻ em
-            utterance.pitch = 1.4; // Nâng cao độ (nghe thanh hơn, giống giọng chị gái/trẻ nhỏ)
-            utterance.rate = 0.95; // Đọc chậm lại một xíu để bé dễ nghe rõ chữ
-            utterance.volume = 0.5; // Giảm âm lượng giọng đọc
+            utterance.pitch = 1.4;
+            utterance.rate = 0.95;
+            utterance.volume = 0.5;
 
             window.speechSynthesis.speak(utterance);
         }
 
-        // Kích hoạt load giọng đọc trước trên một số trình duyệt
         if (speechSynthesis.onvoiceschanged !== undefined) {
             speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
         }
-
-        // Cấu hình Phaser 3
         const config = {
             type: Phaser.AUTO,
             scale: {
@@ -247,21 +294,19 @@
         const startBtn = document.getElementById('startBtn');
         const gameContainer = document.getElementById('game-container');
 
-        // Biến toàn cục của Game
         let isPlaying = false;
         let lastSwitchTime = 0;
         let roadSpeed = 3;
 
-        // Các đối tượng Phaser
         let lines = [];
-        let gardenItems = []; // Các vật trang trí vườn sẽ di chuyển
-        let fenceItemsL = []; // Hàng rào trái
-        let fenceItemsR = []; // Hàng rào phải
+        let gardenItems = [];
+        let fenceItemsL = [];
+        let fenceItemsR = [];
         let car;
-        let lightState = 'GREEN'; // 'GREEN', 'YELLOW', 'RED'
+        let lightState = 'GREEN';
         let redLight, yellowLight, greenLight, redGlow, yellowGlow, greenGlow;
-        let trafficLightContainer; // Container cho đèn giao thông
-        let countdownText; // Chữ đếm ngược
+        let trafficLightContainer;
+        let countdownText;
         let crosswalk;
         let vibrateTween;
         let brakeGlowL, brakeGlowR;
@@ -269,6 +314,9 @@
 
         let teacher, teacherBubble, bubbleText, bubbleContent;
         let currentEffect = null;
+        let finishLine;
+        let isGameOver = false;
+        let cycleCount = 0;
 
         function playEffect(src) {
             if (currentEffect) {
@@ -284,7 +332,6 @@
             startBtn.style.display = 'none';
             gameContainer.style.display = 'block';
 
-            // Phát nhạc nền sau khi người dùng click (bảo mật trình duyệt)
             let bgMusic = document.getElementById('bgMusic');
             if (bgMusic) {
                 bgMusic.volume = 0.05;
@@ -297,33 +344,52 @@
             document.getElementById('pauseBtn').style.display = 'flex';
         });
 
-        // Logic cho Tạm dừng / Tiếp tục / Thoát
         const pauseBtn = document.getElementById('pauseBtn');
         const pauseOverlay = document.getElementById('pauseOverlay');
         const resumeBtn = document.getElementById('resumeBtn');
         const exitBtn = document.getElementById('exitBtn');
 
         pauseBtn.addEventListener('click', () => {
-            if (!isPlaying) return;
+            document.getElementById('pauseOverlay').style.display = 'flex';
             isPlaying = false;
-            game.scene.scenes[0].scene.pause();
-            pauseOverlay.style.display = 'flex';
+            if (game) game.scene.scenes[0].scene.pause();
+
+            // Tạm dừng tất cả âm thanh hiệu ứng
+            activeAudios.forEach(audio => audio.pause());
+
+            // Tạm dừng nhạc nền nếu có
+            let bgMusic = document.getElementById('bgMusic');
+            if (bgMusic) bgMusic.pause();
             pauseBtn.style.display = 'none';
         });
 
         resumeBtn.addEventListener('click', () => {
+            document.getElementById('pauseOverlay').style.display = 'none';
             isPlaying = true;
-            game.scene.scenes[0].scene.resume();
-            pauseOverlay.style.display = 'none';
+            if (game) game.scene.scenes[0].scene.resume();
+
+            // Phát tiếp các âm thanh
+            activeAudios.forEach(audio => audio.play().catch(e => { }));
+
+            // Phát tiếp nhạc nền
+            let bgMusic = document.getElementById('bgMusic');
+            if (bgMusic) bgMusic.play().catch(e => { });
             pauseBtn.style.display = 'flex';
         });
 
         exitBtn.addEventListener('click', () => {
-            location.reload(); // Tải lại trang là cách nhanh nhất để reset toàn bộ về trang chủ
+            location.reload();
+        });
+
+        document.getElementById('replayBtn').addEventListener('click', () => {
+            location.reload();
+        });
+
+        document.getElementById('winExitBtn').addEventListener('click', () => {
+            location.reload();
         });
 
         function preload() {
-            // Tải ảnh cô giáo (đảm bảo file co-giao.png nằm trong thư mục img)
             this.load.image('teacherImg', 'img/co-giao.png');
         }
 
@@ -339,32 +405,46 @@
             teacher = this.add.image(width * 0.1, height * 0.8, 'teacherImg').setScale(0.15).setDepth(100);
             teacherBubble = this.add.container(width * 0.1, height * 0.6).setAlpha(0).setDepth(101);
             let bubbleBg = this.add.graphics();
-            bubbleBg.fillStyle(0xffffff, 1);
-            bubbleBg.fillRoundedRect(0, 0, 200, 60, 15);
-            bubbleBg.lineStyle(2, 0x2c3e50, 1);
-            bubbleBg.strokeRoundedRect(0, 0, 200, 60, 15);
 
-            bubbleBg.fillTriangle(20, 60, 40, 60, 30, 80);
-            bubbleBg.strokeTriangle(20, 60, 40, 60, 30, 80);
-
-            bubbleContent = this.add.text(100, 30, '', {
+            bubbleContent = this.add.text(0, 0, '', {
                 fontSize: '18px',
                 color: '#000',
                 fontStyle: 'bold',
                 fontFamily: 'Arial',
                 align: 'center',
-                wordWrap: { width: 180 }
+                wordWrap: { width: 220 }
             }).setOrigin(0.5);
 
             teacherBubble.add([bubbleBg, bubbleContent]);
 
             this.teacherSay = (text, duration = 3000) => {
                 bubbleContent.setText(text);
+
+                // Tính toán kích thước linh hoạt
+                let padding = 20;
+                let bW = bubbleContent.width + padding * 2;
+                let bH = bubbleContent.height + padding * 2;
+                if (bW < 120) bW = 120;
+
+                // Vẽ lại nền dựa trên kích thước chữ
+                bubbleBg.clear();
+                bubbleBg.fillStyle(0xffffff, 1);
+                bubbleBg.fillRoundedRect(0, 0, bW, bH, 15);
+                bubbleBg.lineStyle(2, 0x2c3e50, 1);
+                bubbleBg.strokeRoundedRect(0, 0, bW, bH, 15);
+
+                // Vẽ đuôi bong bóng
+                bubbleBg.fillTriangle(20, bH, 40, bH, 30, bH + 15);
+                bubbleBg.strokeTriangle(20, bH, 40, bH, 30, bH + 15);
+
+                // Căn giữa chữ vào box
+                bubbleContent.setPosition(bW / 2, bH / 2);
+
                 teacherBubble.setAlpha(1);
 
                 this.tweens.add({
                     targets: teacherBubble,
-                    y: height * 0.55,
+                    y: height * 0.4,
                     duration: 200,
                     ease: 'Power1'
                 });
@@ -380,27 +460,20 @@
                 });
             };
 
-            // --- TẠO TEXTURE KHÓI CHO HIỆU ỨNG TĂNG TỐC ---
             let g = this.make.graphics({ x: 0, y: 0, add: false });
             g.fillStyle(0xffffff, 1);
             g.fillCircle(8, 8, 8);
             g.generateTexture('smoke_particle', 16, 16);
 
-            // Chào mừng khi bắt đầu
-            playEffect('media/greenLight.wav');
-            this.teacherSay("Đi thôi đèn xanh rồi kìa", 4000);
+            playEffect('media/denxanh.wav');
+            this.teacherSay("Đèn xanh rồi các bạn nhỏ ơi, đèn xanh thì chúng ta phải làm gì nhỉ ?", 8000);
 
-            // 1. Vẽ Vườn cỏ mở rộng 2 bên
-            // Nền cỏ trái
             this.add.rectangle(roadLeft / 2, centerY, roadLeft, height, 0x27ae60);
-            // Nền cỏ phải
             this.add.rectangle(roadRight + (width - roadRight) / 2, centerY, width - roadRight, height, 0x27ae60);
 
-            // Lớp cỏ đậm hơn (tạo chiều sâu)
             this.add.rectangle(roadLeft / 4, centerY, roadLeft / 2, height, 0x219a52);
             this.add.rectangle(width - (width - roadRight) / 4, centerY, (width - roadRight) / 2, height, 0x219a52);
 
-            // === HÀM VẼ TRANG TRÍ (trả về container) ===
             const drawTreeInContainer = (scene, tx, ty) => {
                 let c = scene.add.container(tx, ty);
                 c.add(scene.add.rectangle(0, 30, 12, 50, 0x6D4C2A));
@@ -448,17 +521,15 @@
                 return c;
             };
 
-            // === HÀNG RÀO BÊN TRÁI ===
             for (let fy = -50; fy < height + 100; fy += 60) {
                 fenceItemsL.push(drawFencePost(this, roadLeft - 15, fy));
             }
 
-            // === HÀNG RÀO BÊN PHẢI ===
             for (let fy = -50; fy < height + 100; fy += 60) {
                 fenceItemsR.push(drawFencePost(this, roadRight + 15, fy));
             }
 
-            // === VẬT TRANG TRÍ VƯỜN (Phân bố ngẫu nhiên trong vùng cỏ) ===
+
             const addGardenItem = (itemFunc, side) => {
                 let rx = (side === 'L') ? Phaser.Math.Between(30, roadLeft - 50) : Phaser.Math.Between(roadRight + 50, width - 30);
                 let ry = Phaser.Math.Between(-100, height + 100);
@@ -536,7 +607,7 @@
             greenLight = this.add.circle(70, 0, 24, 0x33ff33).setAlpha(1);
             trafficLightContainer.add([redGlow, redLight, yellowGlow, yellowLight, greenGlow, greenLight]);
 
-            countdownText = this.add.text(centerX, 180, '', {
+            countdownText = this.add.text(centerX, 300, '', {
                 fontSize: '96px',
                 fontFamily: 'Arial Black, Arial, sans-serif',
                 color: '#FFD700',
@@ -544,6 +615,21 @@
                 strokeThickness: 8,
                 shadow: { offsetX: 3, offsetY: 3, color: '#000', blur: 8, fill: true }
             }).setOrigin(0.5).setAlpha(0).setDepth(100);
+
+            // 6.5. Vạch đích (ẩn ban đầu)
+            finishLine = this.add.container(centerX, -200);
+            let checkeredLine = this.add.graphics();
+            let sqSize = 40;
+            for (let i = 0; i < 15; i++) {
+                for (let j = 0; j < 2; j++) {
+                    checkeredLine.fillStyle((i + j) % 2 === 0 ? 0xffffff : 0x000000, 1);
+                    checkeredLine.fillRect(-300 + i * sqSize, j * sqSize, sqSize, sqSize);
+                }
+            }
+            let schoolSign = this.add.rectangle(0, -60, 250, 80, 0x2980b9).setStrokeStyle(4, 0xffffff);
+            let schoolText = this.add.text(0, -60, 'TRƯỜNG HỌC', { fontSize: '32px', color: '#fff', fontWeight: 'bold' }).setOrigin(0.5);
+            finishLine.add([checkeredLine, schoolSign, schoolText]);
+            finishLine.setDepth(5);
 
             // 7. Ô tô
             car = this.add.container(centerX, height * 0.8);
@@ -584,8 +670,70 @@
                 ease: 'Sine.easeInOut'
             });
 
+            // --- HÀM ĐẾM NGƯỢC LINH HOẠT (Có thêm tham số Delay) ---
+            this.startCountdown = (seconds, delay = 0, callback) => {
+                this.time.delayedCall(delay, () => {
+                    countdownText.setAlpha(1);
+                    for (let i = 0; i < seconds; i++) {
+                        this.time.delayedCall(i * 1000, () => {
+                            let current = seconds - i;
+                            countdownText.setText(current.toString()).setScale(2);
+                            this.tweens.add({ targets: countdownText, scaleX: 1, scaleY: 1, duration: 400, ease: 'Back.out' });
+                            // Ẩn số sau khi đếm về 1
+                            if (current === 1) {
+                                this.time.delayedCall(1000, () => {
+                                    countdownText.setAlpha(0);
+                                });
+                            }
+                        });
+                    }
+                    if (callback) {
+                        this.time.delayedCall(seconds * 1000, callback);
+                    }
+                });
+            };
+
+            // Bắt đầu đếm ngược cho Đèn Xanh sau khi cô giáo nói xong (chờ 5 giây)
+            this.startCountdown(5, 4000);
+
+            // PHÓNG TO ĐÈN XANH ngay từ đầu
+            this.tweens.add({
+                targets: trafficLightContainer,
+                scaleX: 1.8, scaleY: 1.8, y: 150,
+                duration: 500, ease: 'Back.out'
+            });
+
             isPlaying = true;
             lastSwitchTime = this.time.now;
+
+            // --- HIỆU ỨNG CHÚC MỪNG CHIẾN THẮNG (RƠI LIÊN TỤC) ---
+            this.celebrateVictory = () => {
+                const colors = [0xff4757, 0x2ecc71, 0x3498db, 0xf1c40f, 0xe67e22, 0x9b59b6];
+                const { width, height } = this.cameras.main;
+
+                this.confettiTimer = this.time.addEvent({
+                    delay: 150,
+                    callback: () => {
+                        for (let i = 0; i < 5; i++) {
+                            let x = Phaser.Math.Between(0, width);
+                            let y = -20;
+                            let size = Phaser.Math.Between(8, 15);
+                            let confetti = this.add.rectangle(x, y, size, size, colors[Phaser.Math.Between(0, colors.length - 1)]);
+                            confetti.setDepth(4000);
+                            this.tweens.add({
+                                targets: confetti,
+                                y: height + 100,
+                                x: x + Phaser.Math.Between(-200, 200),
+                                angle: Phaser.Math.Between(360, 1080),
+                                duration: Phaser.Math.Between(3000, 5000),
+                                ease: 'Sine.inOut',
+                                onComplete: () => confetti.destroy()
+                            });
+                        }
+                    },
+                    loop: true
+                });
+            };
         }
 
         function update(time, delta) {
@@ -616,26 +764,71 @@
                 let gardenSpeed = roadSpeed * 0.7;
                 for (let i = 0; i < gardenItems.length; i++) {
                     gardenItems[i].y += gardenSpeed;
-                    if (gardenItems[i].y > height + 100) gardenItems[i].y -= (height + 200);
+                    if (gardenItems[i].y > height + 100) {
+                        if (!isGameOver) gardenItems[i].y -= (height + 200);
+                    }
+                }
+
+                // Di chuyển vạch đích nếu đang kết thúc
+                if (isGameOver) {
+                    finishLine.y += roadSpeed;
+                    if (finishLine.y >= car.y - 100) {
+                        // Dừng xe khi chạm vạch đích
+                        roadSpeed = Math.max(0, roadSpeed - 0.1);
+                        if (roadSpeed === 0) {
+                            isPlaying = false;
+                            vibrateTween.pause();
+                            smokeEmitter.stop();
+                            this.teacherSay("Hoan hô! Bé đã tới trường an toàn rồi! Bé giỏi quá!", 5000);
+
+                            // Hiển thị overlay sau một chút
+                            this.time.delayedCall(1000, () => {
+                                this.celebrateVictory();
+                                document.getElementById('winOverlay').style.display = 'flex';
+                                document.getElementById('pauseBtn').style.display = 'none';
+                            });
+                        }
+                    }
                 }
             }
 
             // Logic chuyển đèn
+            if (isGameOver) return; // Không chuyển đèn nữa nếu đang về đích
             let currentTime = this.time.now;
             let elapsed = currentTime - lastSwitchTime;
 
-            // XANH -> VÀNG (Sau 4 giây)
-            if (lightState === 'GREEN' && elapsed > 4000) {
+            // XANH -> VÀNG (Sau 10 giây)
+            if (lightState === 'GREEN' && elapsed > 10000) {
                 lightState = 'YELLOW';
                 lastSwitchTime = currentTime;
                 roadSpeed = 2.0;
 
                 playEffect('media/denvang.wav');
-                this.teacherSay("Chú ý đèn vàng! Đi chậm lại", 3000);
+                this.teacherSay("Đèn vàng rồi, các bạn nhỏ cần phải như thế nào nhỉ ?", 8000);
                 greenLight.setAlpha(0);
                 greenGlow.setAlpha(0);
                 yellowLight.setAlpha(1);
                 yellowGlow.setAlpha(1);
+
+                // Ẩn số đếm của đèn cũ
+                countdownText.setAlpha(0);
+
+                // Thu nhỏ đèn xanh cũ và phóng to đèn vàng mới
+                this.tweens.add({
+                    targets: trafficLightContainer,
+                    scaleX: 1, scaleY: 1, y: 80,
+                    duration: 300, ease: 'Back.in',
+                    onComplete: () => {
+                        this.tweens.add({
+                            targets: trafficLightContainer,
+                            scaleX: 1.8, scaleY: 1.8, y: 150,
+                            duration: 500, ease: 'Back.out'
+                        });
+                    }
+                });
+
+                // Chờ 5 giây rồi mới đếm ngược cho đèn vàng
+                this.startCountdown(5, 5000);
 
                 // Hiệu ứng phanh nhẹ giảm tốc
                 brakeGlowL.setAlpha(0.5);
@@ -648,7 +841,7 @@
                 });
             }
             // VÀNG -> ĐỎ (Sau 2 giây)
-            else if (lightState === 'YELLOW' && elapsed > 2000) {
+            else if (lightState === 'YELLOW' && elapsed > 10000) {
                 lightState = 'RED';
                 lastSwitchTime = currentTime;
                 roadSpeed = 0;
@@ -663,18 +856,25 @@
                 redLight.setAlpha(1);
                 redGlow.setAlpha(1);
 
+                // Ẩn số đếm của đèn cũ
+                countdownText.setAlpha(0);
+
                 // Bật đèn phanh đỏ chót
                 brakeGlowL.setAlpha(1);
                 brakeGlowR.setAlpha(1);
 
-                // PHÓNG TO ĐÈN GIAO THÔNG ra giữa màn hình
+                // Thu nhỏ đèn vàng và PHÓNG TO ĐÈN ĐỎ
                 this.tweens.add({
                     targets: trafficLightContainer,
-                    scaleX: 1.8,
-                    scaleY: 1.8,
-                    y: 150,
-                    duration: 500,
-                    ease: 'Back.out'
+                    scaleX: 1, scaleY: 1, y: 80,
+                    duration: 300, ease: 'Back.in',
+                    onComplete: () => {
+                        this.tweens.add({
+                            targets: trafficLightContainer,
+                            scaleX: 1.8, scaleY: 1.8, y: 150,
+                            duration: 500, ease: 'Back.out'
+                        });
+                    }
                 });
 
                 // Hiển thị vạch đi bộ
@@ -687,98 +887,56 @@
                     ease: 'Cubic.out'
                 });
 
-                // === ĐẾM NGƯỢC 3 - 2 - 1 ===
+                // === ĐÈN ĐỎ: CHỜ 5 GIÂY, ĐẾM 5 GIÂY RỒI VỀ ĐÍCH ===
                 playEffect('media/dendo.wav');
-                this.teacherSay("Đèn đỏ rồi! Dừng lại", 3000);
-                this.time.delayedCall(1200, () => {
-                    countdownText.setText('3');
-                    countdownText.setAlpha(1);
-                    countdownText.setScale(2);
-                    this.tweens.add({ targets: countdownText, scaleX: 1, scaleY: 1, duration: 400, ease: 'Back.out' });
-                });
+                this.teacherSay("Đèn đỏ rồi, chúng ta cần phải làm như thế nào?", 8000);
 
-                this.time.delayedCall(2400, () => {
-                    countdownText.setText('2');
-                    countdownText.setScale(2);
-                    this.tweens.add({ targets: countdownText, scaleX: 1, scaleY: 1, duration: 400, ease: 'Back.out' });
-                });
+                this.startCountdown(5, 5000, () => {
+                    // KẾT THÚC GAME NGAY TẠI ĐÈN ĐỎ
+                    countdownText.setText('BÉ ĐÃ TỚI TRƯỜNG!');
+                    countdownText.setStyle({ color: '#2ECC71', fontSize: '64px' });
+                    countdownText.setScale(1);
+                    this.tweens.add({ targets: countdownText, scaleX: 1.2, scaleY: 1.2, duration: 1000, ease: 'Power2' });
 
-                this.time.delayedCall(3600, () => {
-                    countdownText.setText('1');
-                    countdownText.setScale(2);
-                    this.tweens.add({ targets: countdownText, scaleX: 1, scaleY: 1, duration: 400, ease: 'Back.out' });
-                });
+                    isGameOver = true;
+                    roadSpeed = 0; // Dừng hẳn xe
+                    isPlaying = false; // Dừng loop game
 
-                // Tự động chuyển ĐỎ -> XANH
-                this.time.delayedCall(4800, () => {
-                    countdownText.setText('ĐI!');
-                    countdownText.setStyle({ color: '#2ECC71' });
-                    countdownText.setScale(2.5);
-                    this.tweens.add({ targets: countdownText, scaleX: 1.2, scaleY: 1.2, alpha: 0, duration: 600, ease: 'Power2' });
+                    vibrateTween.pause();
+                    smokeEmitter.stop();
+                    brakeGlowL.setAlpha(1);
+                    brakeGlowR.setAlpha(1);
 
-                    this.time.delayedCall(700, () => {
-                        countdownText.setStyle({
-                            fontSize: '96px', fontFamily: 'Arial Black, Arial, sans-serif',
-                            color: '#FFD700', stroke: '#000000', strokeThickness: 8
-                        });
+                    this.teacherSay("Chúc mừng bé đã tới trường an toàn! Bé giỏi quá!", 10000);
+
+                    // Chạy hiệu ứng pháo hoa giấy rực rỡ
+                    this.celebrateVictory();
+
+                    // Hiển thị overlay chúc mừng sau 10 giây
+                    this.time.delayedCall(10000, () => {
+                        document.getElementById('winOverlay').style.display = 'flex';
+                        document.getElementById('pauseBtn').style.display = 'none';
                     });
-
-                    lightState = 'GREEN';
-                    lastSwitchTime = this.time.now;
-                    roadSpeed = 3;
-                    playEffect('media/greenLight.wav');
-                    this.teacherSay("Đèn xanh rồi, chúng mình cùng đi nào!", 3000);
-                    vibrateTween.resume();
-
-                    brakeGlowL.setAlpha(0);
-                    brakeGlowR.setAlpha(0);
-
-                    redLight.setAlpha(0);
-                    redGlow.setAlpha(0);
-                    greenLight.setAlpha(1);
-                    greenGlow.setAlpha(1);
-
-                    // Thu nhỏ đèn về lại
-                    this.tweens.add({
-                        targets: trafficLightContainer,
-                        scaleX: 1, scaleY: 1, y: 80,
-                        duration: 400, ease: 'Back.out'
-                    });
-
-                    // Ẩn vạch đi bộ
-                    this.tweens.add({
-                        targets: crosswalk, alpha: 0, y: height / 2 + 150,
-                        duration: 500, ease: 'Power1'
-                    });
-
-                    smokeEmitter.start();
-                    this.time.delayedCall(800, () => smokeEmitter.stop());
-
-                    this.tweens.add({
-                        targets: car,
-                        y: 480, scaleY: 1.05, scaleX: 0.98,
-                        duration: 300, yoyo: true, ease: 'Power2'
-                    });
-                });
-
-                // Hiệu ứng dừng (tạo vệt phanh)
-                let skidL = this.add.rectangle(370, 500, 8, 40, 0x111111, 0.7);
-                let skidR = this.add.rectangle(430, 500, 8, 40, 0x111111, 0.7);
-                this.tweens.add({
-                    targets: [skidL, skidR],
-                    alpha: 0, duration: 2000,
-                    onComplete: () => { skidL.destroy(); skidR.destroy(); }
-                });
-
-                this.tweens.add({
-                    targets: car,
-                    y: 460, scaleY: 0.9, scaleX: 1.02,
-                    duration: 250, yoyo: true, ease: 'Quad.out',
-                    onComplete: () => {
-                        car.scaleY = 1; car.scaleX = 1; car.y = 480;
-                    }
                 });
             }
+
+            // Hiệu ứng dừng (tạo vệt phanh)
+            let skidL = this.add.rectangle(370, 500, 8, 40, 0x111111, 0.7);
+            let skidR = this.add.rectangle(430, 500, 8, 40, 0x111111, 0.7);
+            this.tweens.add({
+                targets: [skidL, skidR],
+                alpha: 0, duration: 2000,
+                onComplete: () => { skidL.destroy(); skidR.destroy(); }
+            });
+
+            this.tweens.add({
+                targets: car,
+                y: 460, scaleY: 0.9, scaleX: 1.02,
+                duration: 250, yoyo: true, ease: 'Quad.out',
+                onComplete: () => {
+                    car.scaleY = 1; car.scaleX = 1; car.y = 480;
+                }
+            });
         }
     </script>
 </body>
